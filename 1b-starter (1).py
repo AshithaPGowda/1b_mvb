@@ -186,7 +186,9 @@ class Node:
     # Build a block on the longest chain you are currently tracking.
     def build_block(self, tx: Transaction) -> Optional[Block]:
         longest_chain = max(self.chains, key=len)
+        print("the longest chain is ",longest_chain)
         prev_block_hash = longest_chain[-1].hash()
+        print("the previous hash of the longest chain is : ",prev_block_hash)
 
         # Verify the transaction before building a block
         if not verify_transaction(tx):
@@ -209,6 +211,7 @@ class Node:
         # Check if the inputs in the transaction are unspent (UTXOs)
         for tx_input in tx.inputs:
             if tx_input.number not in self.chain.utxos:
+                print("Double spending detected: ",tx_input.number, "not in ",self.chain.utxos)
                 return False  # If input has already been spent, it's a double spend
         return True
     
@@ -219,7 +222,7 @@ class Node:
         
         # Add new outputs to UTXO set
         for i, output in enumerate(tx.outputs):
-            self.chain.utxos.append(tx.number + str(i))  # Unique identifier for UTXO
+            self.chain.utxos.append(tx.number)  # Unique identifier for UTXO
 
 # Verify that a transaction's signature is valid using the associated public key
 def verify_transaction(tx: Transaction) -> bool:
