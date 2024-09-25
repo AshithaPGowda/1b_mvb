@@ -152,6 +152,9 @@ class Node:
     # you the genesis block.
     def new_chain(self, genesis: Block):
         self.chains.append([genesis]) 
+        self.chain.utxos = [f"{output.value}:{output.pub_key}" for output in genesis.tx.outputs]
+        print("UTXO initiated after creation of genisis block")
+        print(self.chain.utxos)
 
     # Attempt to append a block broadcast on the network; return true if it is
     # possible to add (e.g. could be a fork). Return false otherwise.
@@ -194,6 +197,7 @@ class Node:
         if not verify_transaction(tx):
             print("Veriffy transaction failed, returning none")
             return None
+        print("Before if, self.verify_utxos(tx) : ",self.verify_utxos(tx))
         if not self.verify_utxos(tx):
             print("Veriffy UTXO failed, returning none")
             return None  # Reject double-spend transaction
@@ -210,19 +214,26 @@ class Node:
     def verify_utxos(self, tx: Transaction) -> bool:
         # Check if the inputs in the transaction are unspent (UTXOs)
         for tx_input in tx.inputs:
-            if tx_input.number not in self.chain.utxos:
-                print("Double spending detected: ",tx_input.number, "not in ",self.chain.utxos)
+            identifier = f"{tx_input.output.value}:{tx_input.output.pub_key}"  # Construct identifier
+            if identifier not in self.chain.utxos:
+                print("Double spending detected:", identifier, "not in", self.chain.utxos)
                 return False  # If input has already been spent, it's a double spend
         return True
+
     
     def update_utxos(self, tx: Transaction):
         # Remove spent inputs from UTXO set
         for tx_input in tx.inputs:
-            self.chain.utxos.remove(tx_input.number)
-        
+            # Assuming tx_input.number is the transaction ID
+            identifier = f"{tx_input.number}:{tx_input.output.value}"  # Use output value for clarity
+            if identifier in self.chain.utxos:
+                self.chain.utxos.remove(identifier)  # Remove if it exists
+
         # Add new outputs to UTXO set
         for i, output in enumerate(tx.outputs):
-            self.chain.utxos.append(tx.number)  # Unique identifier for UTXO
+            identifier = f"{tx.id}:{output.value}"  # Use the transaction ID and output value
+            self.chain.utxos.append(identifier)  # Ensure this is a unique identifier for UTXO
+
 
 # Verify that a transaction's signature is valid using the associated public key
 def verify_transaction(tx: Transaction) -> bool:
