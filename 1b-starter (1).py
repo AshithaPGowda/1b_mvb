@@ -94,6 +94,7 @@ class Block:
         self.tx = tx
         self.nonce = nonce
         self.prev = prev
+        self.pow = None
 
     # Find a valid nonce such that the hash below is less than the DIFFICULTY
     # constant. Record the nonce as a hex-encoded string (bytearray.hex(), see
@@ -105,6 +106,8 @@ class Block:
             block_hash = int(self.hash(), 16)  # Convert the hash to an integer
             
             if block_hash < DIFFICULTY:
+                self.pow = self.hash()
+                print("pow after finding difficulty: ",block_hash, "and ", self.pow)
                 break  # Valid nonce found
             
             nonce += 1
@@ -187,13 +190,36 @@ class Node:
 
         # Verify the transaction before building a block
         if not verify_transaction(tx):
+            print("Veriffy transaction failed, returning none")
             return None
+        if not self.verify_utxos(tx):
+            print("Veriffy UTXO failed, returning none")
+            return None  # Reject double-spend transaction
 
         new_block = Block(prev_block_hash, tx, None)
         new_block.mine()
         longest_chain.append(new_block)
+
+        # Update UTXO set (spend inputs, add outputs)
+        self.update_utxos(tx)
         
         return new_block
+    
+    def verify_utxos(self, tx: Transaction) -> bool:
+        # Check if the inputs in the transaction are unspent (UTXOs)
+        for tx_input in tx.inputs:
+            if tx_input.number not in self.chain.utxos:
+                return False  # If input has already been spent, it's a double spend
+        return True
+    
+    def update_utxos(self, tx: Transaction):
+        # Remove spent inputs from UTXO set
+        for tx_input in tx.inputs:
+            self.chain.utxos.remove(tx_input.number)
+        
+        # Add new outputs to UTXO set
+        for i, output in enumerate(tx.outputs):
+            self.chain.utxos.append(tx.number + str(i))  # Unique identifier for UTXO
 
 # Verify that a transaction's signature is valid using the associated public key
 def verify_transaction(tx: Transaction) -> bool:
@@ -201,11 +227,13 @@ def verify_transaction(tx: Transaction) -> bool:
         # Get the public key from the output
         pub_key = tx_input.output.pub_key
         verify_key = VerifyKey(bytes.fromhex(pub_key))
-        
+        print("In verify transaction, verify_key: ",verify_key,"pub_key :",pub_key)
+
         try:
             # Verify the signature on the transaction
             verify_key.verify(bytes.fromhex(tx.bytes_to_sign()), bytes.fromhex(tx.sig_hex))
-        except Exception:
+        except Exception as e:
+            print("Execption received: ",e)
             return False  # Verification failed
     return True
 
