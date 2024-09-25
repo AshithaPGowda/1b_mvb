@@ -231,7 +231,7 @@ class Node:
 
         # Add new outputs to UTXO set
         for i, output in enumerate(tx.outputs):
-            identifier = f"{tx.id}:{output.value}"  # Use the transaction ID and output value
+            identifier = f"{tx.number}:{output.value}"  # Use the transaction ID and output value
             self.chain.utxos.append(identifier)  # Ensure this is a unique identifier for UTXO
 
 
