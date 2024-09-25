@@ -37,7 +37,6 @@ class Input:
     def to_bytes(self) -> bytes:
         return self.output.to_bytes() + bytes.fromhex(self.number)
 
-
 class Transaction:
     """
     A transaction in a block. A signature is the hex-encoded string that
@@ -52,11 +51,12 @@ class Transaction:
         self.update_number()
 
     # Set the transaction number to be SHA256 of self.to_bytes().
+    
     def update_number(self):
-        # TODO 
         tx_hash = hashlib.sha256(bytes.fromhex(self.to_bytes())).hexdigest()
         # Store this as the transaction number
         self.number = tx_hash
+        
 
 
     # Get the bytes of the transaction before signatures; signers need to sign
@@ -69,7 +69,6 @@ class Transaction:
         
         for o in self.outputs:
             m += o.to_bytes()
-
         return m.hex()
     
     def to_bytes(self) -> str:
@@ -133,17 +132,9 @@ class Blockchain:
         self.utxos = utxos
     
     def append(self, block: Block) -> bool:
-        # Check if the block's previous hash matches the last block in the chain
-        if block.prev != self.chain[-1].hash():
-            return False  # Invalid block
-        
-        # Check if the block's proof-of-work (pow) is valid
-        if int(block.hash(), 16) >= DIFFICULTY:
-            return False  # pow check failed
-        
-        # Add the block to the chain
         self.chain.append(block)
-        return True
+        self.utxos.append(block.tx.outputs)
+        return True  
 
 class Node:
     """
@@ -152,6 +143,7 @@ class Node:
     def __init__(self):
         # We will not access this field, you are free change it if needed.
         self.chains = []
+        self.chain = Blockchain([],[])
 
     # Create a new chain with the given genesis block. The autograder will give
     # you the genesis block.
@@ -161,21 +153,30 @@ class Node:
     # Attempt to append a block broadcast on the network; return true if it is
     # possible to add (e.g. could be a fork). Return false otherwise.
     def append(self, block: Block) -> bool:
+        found_valid_prev = False
+
         # Iterate over all the chains tracked by the node
         for chain in self.chains:
-            # Check if the block's `prev` hash matches the last block in the chain
+            # Check if the block's `prev` hash matches the last block in the chain (valid extension)
             if block.prev == chain[-1].hash():
                 # Verify proof-of-work (POW) by checking the block hash vs. DIFFICULTY
                 if int(block.hash(), 16) < DIFFICULTY:
-                    # Append the block to this chain
+                    # Append the block to this chain (valid continuation)
                     chain.append(block)
                     return True  # Successfully added the block to the chain
+            # Check if the `prev` hash exists somewhere else in the chain (potential fork)
+            for blk in chain:
+                if block.prev == blk.hash():
+                    found_valid_prev = True
+
+        # If the `prev` hash exists somewhere in a chain, create a new fork (valid fork)
+        if found_valid_prev:
+            new_chain = [block]
+            self.chains.append(new_chain)
+            return True  # Added the block as a new fork
         
-        # If no matching chain was found, this could be a new fork
-        # Create a new chain starting from this block
-        new_chain = [block]
-        self.chains.append(new_chain)
-        return True  # Added the block as a new fork
+        # If no matching `prev` hash was found in any chain, the block is invalid
+        return False
 
     # Build a block on the longest chain you are currently tracking. If the
     # transaction is invalid (e.g. double spend), return None.
@@ -193,6 +194,7 @@ class Node:
         longest_chain.append(new_block)
         
         return new_block
+
 # Verify that a transaction's signature is valid using the associated public key
 def verify_transaction(tx: Transaction) -> bool:
     for tx_input in tx.inputs:
@@ -211,18 +213,42 @@ def verify_transaction(tx: Transaction) -> bool:
 # impossible to build a valid transaction given the inputs and outputs, you
 # should return None. Do not verify that the inputs are unspent.
 def build_transaction(inputs: List[Input], outputs: List[Output], signing_key: SigningKey) -> Optional[Transaction]:
+    #each number in the input exists as a transaction already on the blockchain
     input_sum = sum(i.output.value for i in inputs)
     output_sum = sum(o.value for o in outputs)
-    
-    # Ensure inputs >= outputs (basic double-spend check)
-    if input_sum < output_sum:
+     
+    # Ensure inputs = outputs 
+    if ((input_sum==0) | (output_sum==0)) :
         return None
+    if input_sum != output_sum:
+        return None
+    temp=inputs[0].output.pub_key   
+    # verify_key = VerifyKey(bytes.fromhex(inputs[0].output.pub_key) )
+    # print(verify_key.verify(bytes.fromhex(inputs[0].number)))
+    list=[]
+    for i in inputs:
+        
+        if temp!=i.output.pub_key:
+            return None
+        if i.number in list:
+            return None
+        list.append(i.number)
+        print(i.number,"i.number")
+        print (i.output.value,", i.output.value")
+        print (i.output.pub_key,", i.output.pubkey")
+    
+    
     
     # Create the transaction without a signature
     transaction = Transaction(inputs, outputs, "")
     
     # Sign the transaction's bytes_to_sign
     sig = signing_key.sign(bytes.fromhex(transaction.bytes_to_sign()))
+    verify_key = VerifyKey(bytes.fromhex(inputs[0].output.pub_key))
+    try:
+        verify_key.verify(sig.message,sig.signature)
+    except Exception:
+        return None               
     transaction.sig_hex = sig.signature.hex()  # Add the signature in hex
-    
+    transaction.update_number()
     return transaction
