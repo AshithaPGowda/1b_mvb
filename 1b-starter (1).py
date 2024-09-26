@@ -32,7 +32,7 @@ class Input:
     def __init__(self, output: Output, number: str):
         self.output = output
         self.number = number
-
+        
     # Serialize the output to bytes
     def to_bytes(self) -> bytes:
         return self.output.to_bytes() + bytes.fromhex(self.number)
@@ -169,7 +169,9 @@ class Node:
                 if int(block.hash(), 16) < DIFFICULTY:
                     # Append the block to this chain (valid continuation)
                     chain.append(block)
-                    return True  # Successfully added the block to the chain
+                    return True  
+                else:
+                    return False # Successfully added the block to the chain
             # Check if the `prev` hash exists somewhere else in the chain (potential fork)
             for blk in chain:
                 if block.prev == blk.hash():
@@ -212,12 +214,16 @@ class Node:
         return new_block
     
     def verify_utxos(self, tx: Transaction) -> bool:
+        longest_chain = max(self.chains, key=len)
         # Check if the inputs in the transaction are unspent (UTXOs)
         for tx_input in tx.inputs:
+            
             identifier = f"{tx_input.output.value}:{tx_input.output.pub_key}"  # Construct identifier
             if identifier not in self.chain.utxos:
                 print("Double spending detected:", identifier, "not in", self.chain.utxos)
                 return False  # If input has already been spent, it's a double spend
+            print("###########################", type(longest_chain))
+            #for n in longest_chain.
         return True
 
     
@@ -225,20 +231,42 @@ class Node:
         # Remove spent inputs from UTXO set
         for tx_input in tx.inputs:
             # Assuming tx_input.number is the transaction ID
-            identifier = f"{tx_input.number}:{tx_input.output.value}"  # Use output value for clarity
+            identifier = f"{tx_input.output.value}:{tx_input.output.pub_key}"  # Use output value for clarity
             if identifier in self.chain.utxos:
                 self.chain.utxos.remove(identifier)  # Remove if it exists
 
         # Add new outputs to UTXO set
         for i, output in enumerate(tx.outputs):
-            identifier = f"{tx.number}:{output.value}"  # Use the transaction ID and output value
+            identifier = f"{output.value}:{output.pub_key}"  # Use the transaction ID and output value
             self.chain.utxos.append(identifier)  # Ensure this is a unique identifier for UTXO
 
 
 # Verify that a transaction's signature is valid using the associated public key
 def verify_transaction(tx: Transaction) -> bool:
+    
+    print("INPUTS",len(tx.inputs))
+    print("OUTPUTS",len(tx.outputs))
+    if (len(tx.outputs)==0)|(len(tx.inputs)==0):
+        return None
+    input_sum = sum(i.output.value for i in tx.inputs)
+    output_sum = sum(o.value for o in tx.outputs)
+     
+    # Ensure inputs = outputs 
+    if input_sum != output_sum:
+        return None
+    t=[]
+    for tx_input in tx.inputs:
+        temp= f"{tx_input.output.value}:{tx_input.output.pub_key}"
+        if temp in t:
+            return None
+        t += [f"{tx_input.output.value}:{tx_input.output.pub_key}" ]
+    
+    
+        
     for tx_input in tx.inputs:
         # Get the public key from the output
+        #for self.chains.
+        #    if tx_input.number not in 
         pub_key = tx_input.output.pub_key
         verify_key = VerifyKey(bytes.fromhex(pub_key))
         print("In verify transaction, verify_key: ",verify_key,"pub_key :",pub_key)
@@ -258,7 +286,7 @@ def build_transaction(inputs: List[Input], outputs: List[Output], signing_key: S
     #each number in the input exists as a transaction already on the blockchain
     input_sum = sum(i.output.value for i in inputs)
     output_sum = sum(o.value for o in outputs)
-     
+    
     # Ensure inputs = outputs 
     if ((input_sum==0) | (output_sum==0)) :
         return None
