@@ -165,6 +165,9 @@ class Node:
         if not block.tx.inputs:
             print("Transaction is empty")
             return None
+        if not verify_transaction(block.tx):
+            print("Invalid signature")
+            return None
             
         input_sum = sum(i.output.value for i in block.tx.inputs)
         output_sum = sum(o.value for o in block.tx.outputs)
@@ -201,6 +204,7 @@ class Node:
                         return False
                     else:
                         chain.append(block)
+                        self.update_utxos(block.tx)
                         return True
                 
                 else:
@@ -247,10 +251,7 @@ class Node:
 
         new_block = Block(prev_block_hash, tx, None)
         new_block.mine()
-        longest_chain.append(new_block)
-
-        # Update UTXO set (spend inputs, add outputs)
-        self.update_utxos(tx)
+        #longest_chain.append(new_block)
         
         return new_block
     
@@ -264,7 +265,7 @@ class Node:
                 return False  # If input has already been spent, it's a double spend
                 #print(n.tx.number)
                # print(tx_input.number)
-        print(identifier)    
+            print("Looking for id:", identifier)    
         return True
 
     
@@ -274,19 +275,19 @@ class Node:
             # Assuming tx_input.number is the transaction ID
             identifier = f"{tx_input.output.value}:{tx_input.output.pub_key}"  # Use output value for clarity
             if identifier in self.chain.utxos:
+                print("REMOVING id:", identifier)
                 self.chain.utxos.remove(identifier)  # Remove if it exists
 
         # Add new outputs to UTXO set
         for i, output in enumerate(tx.outputs):
             identifier = f"{output.value}:{output.pub_key}"  # Use the transaction ID and output value
+            print("APPENDING id:", identifier)
             self.chain.utxos.append(identifier)  # Ensure this is a unique identifier for UTXO
 
 
 # Verify that a transaction's signature is valid using the associated public key
 def verify_transaction(tx: Transaction) -> bool:
-    
-    print("INPUTS",len(tx.inputs))
-    print("OUTPUTS",len(tx.outputs))
+
     if (len(tx.outputs)==0)|(len(tx.inputs)==0):
         return None
     input_sum = sum(i.output.value for i in tx.inputs)
@@ -302,13 +303,8 @@ def verify_transaction(tx: Transaction) -> bool:
         if temp in t:
             return None
         t += [f"{tx_input.output.value}:{tx_input.output.pub_key}" ]
-    
-    
-        
+         
     for tx_input in tx.inputs:
-        # Get the public key from the output
-        #for self.chains.
-        #    if tx_input.number not in 
         pub_key = tx_input.output.pub_key
         verify_key = VerifyKey(bytes.fromhex(pub_key))
         print("In verify transaction, verify_key: ",verify_key,"pub_key :",pub_key)
