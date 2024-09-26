@@ -160,23 +160,57 @@ class Node:
     # possible to add (e.g. could be a fork). Return false otherwise.
     def append(self, block: Block) -> bool:
         found_valid_prev = False
-
+        list=[]
+        longest_chain = max(self.chains, key=len)
+        if not block.tx.inputs:
+            print("Transaction is empty")
+            return None
+            
+        input_sum = sum(i.output.value for i in block.tx.inputs)
+        output_sum = sum(o.value for o in block.tx.outputs)
+        
+        # Ensure inputs = outputs 
+        if ((input_sum==0) | (output_sum==0)) :
+            return None
+        if input_sum != output_sum:
+            return None
+        
+        for n in longest_chain:
+            list.append(n.tx.number)
+        for tx_input in block.tx.inputs:
+            if tx_input.number not in list:
+                return False
+        list=[]
+        n=0
+        for i in block.tx.inputs:
+            n+=1
+            if i.number in list:
+                return False
+            list.append(i.number)
+            
         # Iterate over all the chains tracked by the node
         for chain in self.chains:
             # Check if the block's `prev` hash matches the last block in the chain (valid extension)
             if block.prev == chain[-1].hash():
                 # Verify proof-of-work (POW) by checking the block hash vs. DIFFICULTY
+                
                 if int(block.hash(), 16) < DIFFICULTY:
                     # Append the block to this chain (valid continuation)
-                    chain.append(block)
-                    return True  
+                    if not self.verify_utxos(block.tx):
+                        print("Double-spending detected, block not appended.")
+                        return False
+                    else:
+                        chain.append(block)
+                        return True
+                
                 else:
                     return False # Successfully added the block to the chain
+            
             # Check if the `prev` hash exists somewhere else in the chain (potential fork)
             for blk in chain:
                 if block.prev == blk.hash():
                     found_valid_prev = True
-
+                    
         # If the `prev` hash exists somewhere in a chain, create a new fork (valid fork)
         if found_valid_prev:
             new_chain = [block]
@@ -194,11 +228,18 @@ class Node:
         print("the longest chain is ",longest_chain)
         prev_block_hash = longest_chain[-1].hash()
         print("the previous hash of the longest chain is : ",prev_block_hash)
-
+        
         # Verify the transaction before building a block
         if not verify_transaction(tx):
             print("Veriffy transaction failed, returning none")
             return None
+        list=[]
+        
+        for n in longest_chain:
+            list.append(n.tx.number)
+        for tx_input in tx.inputs:
+            if tx_input.number not in list:
+                return None
         print("Before if, self.verify_utxos(tx) : ",self.verify_utxos(tx))
         if not self.verify_utxos(tx):
             print("Veriffy UTXO failed, returning none")
@@ -214,16 +255,16 @@ class Node:
         return new_block
     
     def verify_utxos(self, tx: Transaction) -> bool:
-        longest_chain = max(self.chains, key=len)
         # Check if the inputs in the transaction are unspent (UTXOs)
+        
         for tx_input in tx.inputs:
-            
             identifier = f"{tx_input.output.value}:{tx_input.output.pub_key}"  # Construct identifier
             if identifier not in self.chain.utxos:
                 print("Double spending detected:", identifier, "not in", self.chain.utxos)
                 return False  # If input has already been spent, it's a double spend
-            print("###########################", type(longest_chain))
-            #for n in longest_chain.
+                #print(n.tx.number)
+               # print(tx_input.number)
+        print(identifier)    
         return True
 
     
@@ -255,6 +296,7 @@ def verify_transaction(tx: Transaction) -> bool:
     if input_sum != output_sum:
         return None
     t=[]
+    
     for tx_input in tx.inputs:
         temp= f"{tx_input.output.value}:{tx_input.output.pub_key}"
         if temp in t:
@@ -297,7 +339,6 @@ def build_transaction(inputs: List[Input], outputs: List[Output], signing_key: S
     # print(verify_key.verify(bytes.fromhex(inputs[0].number)))
     list=[]
     for i in inputs:
-        
         if temp!=i.output.pub_key:
             return None
         if i.number in list:
